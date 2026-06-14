@@ -1,0 +1,13 @@
+db/
+incremental_db/
+*.jdi
+*.qws
+*.sld
+*.pin
+*.done
+*.flow.rpt
+*.fit.smsg
+*.asm.rpt
+*.sgate.nvd
+*.sgate_sm.nvd
+c5_pin_model_dump.txt
