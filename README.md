@@ -2,6 +2,9 @@
 
 **Module:** BIOM2011 & BIOM2012 — Healthcare Technology Design Project (D7)
 **University of Southampton** | Dr Ernesto E. Vidal-Rosas
+**Result: Full marks**
+
+📄 [Read the IEEE Report](./ECG_D7_Report.pdf)
 
 A complete VLSI design chain for a hardware ECG pre-processing filter — from algorithm design in MATLAB through to synthesis on a DE1-SoC FPGA.
 
