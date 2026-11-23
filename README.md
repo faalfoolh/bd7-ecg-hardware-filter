@@ -1,65 +1,67 @@
-# BD7 — ECG Hardware FIR Filter
+# ECG Hardware FIR Filter: MATLAB to FPGA
 
-**Module:** BIOM2011 & BIOM2012 — Healthcare Technology Design Project (D7)
-**University of Southampton** | Dr Ernesto E. Vidal-Rosas
-**Result: Full marks**
+**Module:** BIOM2011 & BIOM2012 Healthcare Technology Design Project (D7), University of Southampton
+**Supervisor:** Prof. Ernesto E. Vidal-Rosas · **Result: full marks**
 
-📄 [Read the IEEE Report](./ECG_D7_Report.pdf)
+📄 [Read the IEEE-format report](./ECG_D7_Report.pdf)
 
-A complete VLSI design chain for a hardware ECG pre-processing filter — from algorithm design in MATLAB through to synthesis on a DE1-SoC FPGA.
+ECG from wearable devices is corrupted by high-frequency noise (muscle activity, mains interference) and by low-frequency baseline wander (breathing, electrode movement). This project takes an ECG pre-processing filter through the full hardware design chain, because a dedicated hardware filter uses far less power than running the same maths in software on a microprocessor, which matters for a device that has to last a day on a battery.
 
-## The Problem
-ECG signals captured by wearable devices are corrupted by noise and baseline wandering. This project designs a hardware filter to recover clean ECG — implemented in silicon rather than software for power efficiency (targeting 16–18 hour battery life).
-
-## Design Chain
+## Design chain
 
 ```
-MATLAB (Algorithm) → SystemVerilog (RTL) → FPGA (DE1-SoC)
+MATLAB design  →  SystemVerilog RTL  →  ModelSim simulation  →  Quartus synthesis (DE1-SoC)
 ```
 
-### Step 1 — MATLAB (`ECG/ecg_filter.m`)
-- Loads 4 real ECG recordings (1 kHz sample rate)
-- Designs FIR bandpass filter: **0.5 Hz – 40 Hz** (removes baseline drift and HF noise)
-- Method: Windowed sinc with Hamming window, order 40 (41 taps)
-- Exports integer coefficients (×1024 scaled) for hardware implementation
+### 1. MATLAB (`ECG/ecg_filter.m`)
+- Loads MIT-BIH Arrhythmia Database record 105 (1 kHz) and characterises the noise and baseline wander
+- Removes baseline wander by subtracting a 1000-sample moving average
+- Designs a **41-tap linear-phase FIR low-pass filter** with a 40 Hz cut-off (windowed sinc)
+- Scales the coefficients by 1024 and rounds them to integers for fixed-point hardware
 
-### Step 2 — SystemVerilog (`SystemVerilog_sample_code/FIR.sv`)
-4-block RTL architecture:
-1. **Coefficient ROM** — 41 hardcoded signed values from MATLAB
-2. **Delay line** — 41-tap shift register (clocked, async reset)
-3. **Multiplier array** — tap × coefficient for each of 41 taps
-4. **Accumulator** — sums all products, right-shifts by 10 to undo ×1024 scaling
+A 41-tap filter at 1 kHz is far too short to realise a 0.5 Hz edge, so the FIR acts as the 40 Hz low-pass stage and the moving average handles the baseline. A single 0.5–40 Hz band-pass FIR would need many more taps; the report discusses this trade-off.
 
-### Step 3 — FPGA (`FIR_Top.sv`)
-- Target: DE1-SoC (50 MHz clock)
-- Switches `SW[9:0]` → filter input
-- LEDs `LED[9:0]` → filtered output
-- Simulation: ModelSim (`run_analog.do`) — shows analog ECG waveforms
+### 2. SystemVerilog (`SystemVerilog_sample_code/FIR.sv`, `FIR_Top.sv`)
+- 41-stage, 16-bit shift register as the tapped delay line
+- Coefficient table holding the 41 symmetric integer coefficients (h[k] = h[40−k], so the phase response is linear)
+- Multiply-accumulate into a 32-bit sum, then an arithmetic right shift by 10 to undo the ×1024 scaling
+- Top level for the DE1-SoC: input from the slide switches, output to the LEDs
 
-## Key Design Choices
-- **FIR over IIR** — guaranteed stability, linear phase
-- **Integer arithmetic** — no floating point hardware needed
-- **Multiplierless potential** — shift-and-add noted as lower-power alternative
+### 3. ModelSim (`tb_FIR.sv`, `run_analog.do`)
+The testbench streams the ECG samples from `InputSignal.txt` through the RTL model. The hardware output, re-imported into MATLAB, matched the floating-point MATLAB filter **within ±2 LSB**, with every R peak within one sample.
 
-## Filter Specs
+### 4. Quartus
+Compiled for the Cyclone V (5CSEMA5F31C6) on the DE1-SoC board. Timing analysis met the **10 MHz** clock constraint with positive slack.
+
+## Filter specification
+
 | Parameter | Value |
-|-----------|-------|
-| Type | FIR Bandpass |
-| Passband | 0.5 Hz – 40 Hz |
-| Order | 40 (41 taps) |
-| Window | Hamming |
+|---|---|
+| Type | FIR low-pass, linear phase |
+| Cut-off | 40 Hz |
+| Taps | 41 (order 40) |
+| Coefficients | Integers, scaled ×1024 |
+| Baseline removal | 1000-sample moving average (MATLAB stage) |
 | Sample rate | 1 kHz |
-| Target clock | ≥ 10 kHz |
+| Data width | 16-bit input and output, 32-bit accumulator |
 
-## Run Simulation
+## Run the simulation
+
+In the ModelSim transcript, from `SystemVerilog_sample_code/`:
+
 ```
-# In ModelSim transcript:
 do run_analog.do
 ```
 
-## Tech Stack
-- MATLAB (filter design)
-- SystemVerilog (RTL design)
-- ModelSim (functional simulation)
-- Intel Quartus (FPGA synthesis)
-- DE1-SoC FPGA board
+## Repository layout
+
+| Folder | Contents |
+|---|---|
+| `ECG/` | MATLAB design script and four MIT-BIH records |
+| `SystemVerilog_sample_code/` | The ECG filter RTL, top level, testbench and ModelSim script |
+| `Quartus_FPGA_Project/` | A separate DE1-SoC audio-codec filter project (`D1.sv`, top level `fir_3`): a 17-tap FIR that shares one DSP multiplier across all taps under a small state machine, with fit and timing reports (Fmax 103–106 MHz) |
+| `Tutorials/`, `Resources/` | ModelSim and Quartus guides, background slides |
+
+## Tools
+
+MATLAB · SystemVerilog · ModelSim · Intel Quartus Prime · DE1-SoC (Cyclone V)
